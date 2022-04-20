@@ -1,12 +1,16 @@
 #!/bin/bash
 
-# Run this script with three params (e.g. './activity-check_new.sh my-vpn 1200 12')
-# where 'my-vpn' is the connection name in Network Manager
-# 1200 is the number of seconds to wait before restarting db1000n and the NM connection
-# 12 is the expected amount of mega bytes to be generated regard to stats. If this value is not met then restart
-# Actual restart will happen only if two conditions above are met
+# This script automatically downloads and starts db1000n then monitors its effectivity.
+# If needed it restarts the connection and db1000n.
+# It also checks for a new release of db1000n every 3 hours and if available downloads it and run it
 
-downloadAttaker() {
+# Run this script with three params (e.g. './activity-check_new.sh 1200 12 my-vpn')
+# 1200 is the number of seconds to wait before restarting db1000n and the NM connection (optional)
+# 12 is the expected amount of mega bytes to be generated regard to stats. If this value is not met then restart (optional)
+# Actual restart will happen only if two conditions above are met
+# 'my-vpn' is the connection name in Network Manager (optional)
+
+downloadDB1000n() {
   echo ========================================================================
   echo $(date): Downloading attacker release: ${LATEST_TAG}
 
@@ -55,11 +59,12 @@ isNewerAttackerAvailable() {
 }
 
 startAttacker() {
-  echo "$(date): Reconnecting to the VPN: $1"
-
-  nmcli c down $1
-  sleep 3
-  nmcli c up $1
+  if [ ! -z "${CONNECTION_NAME}" ]; then
+    echo "$(date): Reconnecting to the VPN: $CONNECTION_NAME"
+    nmcli c down $CONNECTION_NAME
+    sleep 3
+    nmcli c up $CONNECTION_NAME
+  fi
 
   PROCESS_STARTUP_TIME=$(date +%s)
   LOG_FILE="logs/${PROCESS_STARTUP_TIME}.txt"
@@ -81,15 +86,17 @@ echo "$(date): +++ Started Auto-Attacker script +++"
 
 mkdir -p logs
 
-CONNECTION_NAME=$1
-TIME_OUT_SEC=$2
-MIN_TRAFFIC="${3:-8}"
+CHECK_FOR_NEW_RELEASE_INTERVAL=10800 # Each 3 hours
+
+TIME_OUT_SEC=${1:-1200}
+MIN_TRAFFIC="${2:-8}"
+CONNECTION_NAME=$3
 SUMMARY_GENERATED=0
 TRAFFIC_STATS_COUNT=0
 
-echo "Connection to use: ${CONNECTION_NAME}"
 echo "Timeout in seconds: $TIME_OUT_SEC"
 echo "Minimal traffic before attacker reset: ${MIN_TRAFFIC}MB"
+echo "Connection to use: ${CONNECTION_NAME:-"No connection provided"}"
 echo "Intial launch..."
 
 if isNewerAttackerAvailable; then
@@ -108,21 +115,29 @@ while true; do
     TRAFFIC_STATS_COUNT=$traffic_stats_count
     TOTAL=$(grep -Po "Total\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\.\d+" "./$LOG_FILE" | grep -Po "\d+\.\d+" | tail -n1)
 
-    SUMMARY_GENERATED=$(echo $TOTAL + $SUMMARY_GENERATED | bc)
+    if [ -z "${PREVIOUS_TOTAL}" ]; then
+      TRAFFIC=$TOTAL
+    else
+      TRAFFIC=$(echo "$TOTAL - $PREVIOUS_TOTAL" | bc)
+    fi
 
-    if (($(echo "$TOTAL < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
+    PREVIOUS_TOTAL=$TOTAL
+    SUMMARY_GENERATED=$(echo "$TRAFFIC + $SUMMARY_GENERATED" | bc)
+
+    echo -ne "Generated: $SUMMARY_GENERATED MB"\\r
+    if (($(echo "$TRAFFIC < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
       killPreviousAttacker
-      startAttacker $CONNECTION_NAME
+      startAttacker
     fi
   fi
 
-  if [ "$(expr $(date +%s) - $LAST_RELEASE_CHECK_TIME)" -gt 10800 ]; then # Each 3 hours check for a new release
+  if [ "$(expr $(date +%s) - $LAST_RELEASE_CHECK_TIME)" -gt $CHECK_FOR_NEW_RELEASE_INTERVAL ]; then
     LAST_RELEASE_CHECK_TIME=$(date +%s)
 
     if isNewerAttackerAvailable; then
       killPreviousAttacker
       downloadAttaker
-      startAttacker $2
+      startAttacker
     fi
   fi
 
