@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Run this script with three params (e.g. './activity-check_new.sh my-vpn 1200 12')
+# where 'my-vpn' is the connection name in Network Manager
+# 1200 is the number of seconds to wait before restarting db1000n and the NM connection
+# 12 is the expected amount of mega bytes to be generated regard to stats. If this value is not met then restart
+# Actual restart will happen only if two conditions above are met
+
 downloadAttaker() {
   echo ========================================================================
   echo $(date): Downloading attacker release: ${LATEST_TAG}
