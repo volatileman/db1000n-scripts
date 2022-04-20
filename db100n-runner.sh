@@ -10,7 +10,7 @@
 # Actual restart will happen only if two conditions above are met
 # 'my-vpn' is the connection name in Network Manager (optional)
 
-downloadDB1000n() {
+downloadAttacker() {
   echo ========================================================================
   echo $(date): Downloading attacker release: ${LATEST_TAG}
 
@@ -100,7 +100,7 @@ echo "Connection to use: ${CONNECTION_NAME:-"No connection provided"}"
 echo "Intial launch..."
 
 if isNewerAttackerAvailable; then
-  downloadAttaker
+  downloadAttacker
 fi
 
 LAST_RELEASE_CHECK_TIME=$(date +%s)
@@ -124,6 +124,7 @@ while true; do
     PREVIOUS_TOTAL=$TOTAL
     SUMMARY_GENERATED=$(echo "$TRAFFIC + $SUMMARY_GENERATED" | bc)
 
+    # TODO convert to human readable format
     echo -ne "Generated: $SUMMARY_GENERATED MB"\\r
     if (($(echo "$TRAFFIC < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
       killPreviousAttacker
@@ -136,7 +137,7 @@ while true; do
 
     if isNewerAttackerAvailable; then
       killPreviousAttacker
-      downloadAttaker
+      downloadAttacker
       startAttacker
     fi
   fi
