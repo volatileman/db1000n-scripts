@@ -133,7 +133,8 @@ while true; do
     PREVIOUS_TOTAL=$TOTAL
 
     sed -i "1s/.*/$(date): Generated: \
-        $(echo ${SUMMARY_GENERATED}Mi | numfmt --from=iec-i | numfmt --to=iec-i --suffix=B)/" $SUMMARY_LOG_FILE
+        $(echo ${SUMMARY_GENERATED} | grep -Po "^\d+" | awk '{print $1"Mi"}' | numfmt --from=iec-i \
+         | numfmt --to=iec-i --suffix=B)/" $SUMMARY_LOG_FILE
     if (($(echo "$TRAFFIC < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
       killPreviousAttacker
       startAttacker
