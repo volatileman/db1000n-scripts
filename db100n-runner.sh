@@ -3,8 +3,9 @@
 # This script automatically downloads and starts db1000n then monitors its effectivity.
 # If needed it restarts the connection and db1000n.
 # It also checks for a new release of db1000n every 3 hours and if available downloads it and run it
+# Warning! It depends on the output of db1000n so multiple workers are not supported (-scale option)
 
-# Run this script with three params (e.g. './activity-check_new.sh 1200 12 my-vpn') pr without any
+# Run this script with three params (e.g. './activity-check_new.sh 1200 12 my-vpn') or without any
 # 1200 is the interval in seconds for expected traffic to be generated
 # 12 is the expected traffic in mega bytes to be generated regard to stats
 # Actual restart will happen only if expected traffic was not generated during the specified interval
@@ -70,6 +71,7 @@ startAttacker() {
   fi
 
   PREVIOUS_TOTAL=0
+  TRAFFIC_STATS_COUNT=0
   PROCESS_STARTUP_TIME=$(date +%s)
   LOG_FILE="logs/${PROCESS_STARTUP_TIME}.log"
 
@@ -88,6 +90,8 @@ startAttacker() {
 
 echo "$(date): +++ Started Auto-Attacker script +++"
 
+# TODO: check for all needed tools
+
 mkdir -p logs
 
 echo "Clearing logs directory..."
@@ -103,8 +107,6 @@ MIN_TRAFFIC="${2:-8}"
 CONNECTION_NAME=$3
 
 SUMMARY_GENERATED=0
-TRAFFIC_STATS_COUNT=0
-PREVIOUS_TOTAL=0
 
 echo "Timeout in seconds: $TIME_OUT_SEC"
 echo "Minimal traffic before attacker reset: ${MIN_TRAFFIC}MB"
