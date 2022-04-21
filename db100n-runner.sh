@@ -4,11 +4,11 @@
 # If needed it restarts the connection and db1000n.
 # It also checks for a new release of db1000n every 3 hours and if available downloads it and run it
 
-# Run this script with three params (e.g. './activity-check_new.sh 1200 12 my-vpn')
-# 1200 is the number of seconds to wait before restarting db1000n and the NM connection (optional)
-# 12 is the expected amount of mega bytes to be generated regard to stats. If this value is not met then restart (optional)
-# Actual restart will happen only if two conditions above are met
-# 'my-vpn' is the connection name in Network Manager (optional)
+# Run this script with three params (e.g. './activity-check_new.sh 1200 12 my-vpn') pr without any
+# 1200 is the interval in seconds for expected traffic to be generated
+# 12 is the expected traffic in mega bytes to be generated regard to stats
+# Actual restart will happen only if expected traffic was not generated during the specified interval
+# 'my-vpn' is the connection name in Network Manager
 
 downloadAttacker() {
   echo ========================================================================
@@ -29,6 +29,9 @@ killPreviousAttacker() {
     echo "$(date): Killing previous app. PID: ${ATTACKER_PID}"
     kill $ATTACKER_PID
   fi
+
+  echo "Removing old log file: $LOG_FILE"
+  rm $LOG_FILE
 }
 
 getAttackerVersion() {
@@ -66,8 +69,9 @@ startAttacker() {
     nmcli c up $CONNECTION_NAME
   fi
 
+  PREVIOUS_TOTAL=0
   PROCESS_STARTUP_TIME=$(date +%s)
-  LOG_FILE="logs/${PROCESS_STARTUP_TIME}.txt"
+  LOG_FILE="logs/${PROCESS_STARTUP_TIME}.log"
 
   echo ========================================================================
   echo "Starting attacker: ${LOCAL_VERSION}"
@@ -86,13 +90,21 @@ echo "$(date): +++ Started Auto-Attacker script +++"
 
 mkdir -p logs
 
+echo "Clearing logs directory..."
+find "./logs" -name '[0-9]*.log' -delete
+
+SUMMARY_LOG_FILE="./logs/summary_$(date +%y-%m-%d--%H-%M-%S-%N).log"
+echo "" >> $SUMMARY_LOG_FILE
+
 CHECK_FOR_NEW_RELEASE_INTERVAL=10800 # Each 3 hours
 
 TIME_OUT_SEC=${1:-1200}
 MIN_TRAFFIC="${2:-8}"
 CONNECTION_NAME=$3
+
 SUMMARY_GENERATED=0
 TRAFFIC_STATS_COUNT=0
+PREVIOUS_TOTAL=0
 
 echo "Timeout in seconds: $TIME_OUT_SEC"
 echo "Minimal traffic before attacker reset: ${MIN_TRAFFIC}MB"
@@ -105,7 +117,8 @@ fi
 
 LAST_RELEASE_CHECK_TIME=$(date +%s)
 LOCAL_VERSION=$(getAttackerVersion)
-startAttacker $CONNECTION_NAME
+
+startAttacker
 
 echo "Starting loop..."
 while true; do
@@ -115,17 +128,12 @@ while true; do
     TRAFFIC_STATS_COUNT=$traffic_stats_count
     TOTAL=$(grep -Po "Total\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\.\d+" "./$LOG_FILE" | grep -Po "\d+\.\d+" | tail -n1)
 
-    if [ -z "${PREVIOUS_TOTAL}" ]; then
-      TRAFFIC=$TOTAL
-    else
-      TRAFFIC=$(echo "$TOTAL - $PREVIOUS_TOTAL" | bc)
-    fi
-
-    PREVIOUS_TOTAL=$TOTAL
+    TRAFFIC=$(echo "$TOTAL - $PREVIOUS_TOTAL" | bc)
     SUMMARY_GENERATED=$(echo "$TRAFFIC + $SUMMARY_GENERATED" | bc)
+    PREVIOUS_TOTAL=$TOTAL
 
-    # TODO convert to human readable format
-    echo -ne "Generated: $SUMMARY_GENERATED MB"\\r
+    sed -i "1s/.*/$(date): Generated: \
+        $(echo ${SUMMARY_GENERATED}Mi | numfmt --from=iec-i | numfmt --to=iec-i --suffix=B)/" $SUMMARY_LOG_FILE
     if (($(echo "$TRAFFIC < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
       killPreviousAttacker
       startAttacker
