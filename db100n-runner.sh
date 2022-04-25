@@ -30,9 +30,6 @@ killPreviousAttacker() {
     echo "$(date): Killing previous app. PID: ${ATTACKER_PID}"
     kill $ATTACKER_PID
   fi
-
-  echo "Removing old log file: $LOG_FILE"
-  rm $LOG_FILE
 }
 
 getAttackerVersion() {
@@ -62,24 +59,33 @@ isNewerAttackerAvailable() {
   return 1
 }
 
-startAttacker() {
-  if [ ! -z "${CONNECTION_NAME}" ]; then
-    echo "$(date): Reconnecting to the VPN: $CONNECTION_NAME"
-    nmcli c down $CONNECTION_NAME
-    sleep 3
-    nmcli c up $CONNECTION_NAME
+isVPNActive() {
+  if [ -z "${CONNECTION_NAME}" ]; then
+    return 0
+  else
+    if nmcli con show --active | grep -q $CONNECTION_NAME; then return 0; else return 1; fi
   fi
+}
 
-  PREVIOUS_TOTAL=0
-  TRAFFIC_STATS_COUNT=0
-  PROCESS_STARTUP_TIME=$(date +%s)
-  LOG_FILE="logs/${PROCESS_STARTUP_TIME}.log"
+reconnectVPN() {
+  if [ ! -z "${CONNECTION_NAME}" ]; then
+    if isVPNActive; then
+      nmcli c down $CONNECTION_NAME
+      sleep 5
+      nmcli c up $CONNECTION_NAME
+    else
+      nmcli c up $CONNECTION_NAME
+    fi
+  fi
+}
+
+startAttacker() {
+  reconnectVPN
 
   echo ========================================================================
-  echo "Starting attacker: ${LOCAL_VERSION}"
-  echo "Current log file is:" $LOG_FILE
+  echo "$(date): Starting attacker: ${LOCAL_VERSION}"
 
-  ./db1000n >>$LOG_FILE &
+  ./db1000n &
   ATTACKER_PID=$!
 
   if [ -z "${ATTACKER_PID}" ]; then
@@ -88,63 +94,34 @@ startAttacker() {
   fi
 }
 
-echo "$(date): +++ Started Auto-Attacker script +++"
+echo "+++ Started Auto-Attacker script +++"
 
 # TODO: check for all needed tools
 
-mkdir -p logs
+RELEASE_CHECK_INTERVAL=10800 # Each 3 hours
+LAST_RELEASE_CHECK_TIME=$(date +%s)
 
-echo "Clearing logs directory..."
-find "./logs" -name '[0-9]*.log' -delete
+CONNECTION_NAME=$1
 
-SUMMARY_LOG_FILE="./logs/summary_$(date +%y-%m-%d--%H-%M-%S-%N).log"
-echo "" >> $SUMMARY_LOG_FILE
-
-CHECK_FOR_NEW_RELEASE_INTERVAL=10800 # Each 3 hours
-
-TIME_OUT_SEC=${1:-1200}
-MIN_TRAFFIC="${2:-8}"
-CONNECTION_NAME=$3
-
-SUMMARY_GENERATED=0
-
-echo "Timeout in seconds: $TIME_OUT_SEC"
-echo "Minimal traffic before attacker reset: ${MIN_TRAFFIC}MB"
-echo "Connection to use: ${CONNECTION_NAME:-"No connection provided"}"
-echo "Intial launch..."
+echo "Connection to use: ${CONNECTION_NAME:-"---"}"
+echo "Initial launch..."
 
 if isNewerAttackerAvailable; then
   downloadAttacker
 fi
 
-LAST_RELEASE_CHECK_TIME=$(date +%s)
 LOCAL_VERSION=$(getAttackerVersion)
 
 startAttacker
 
 echo "Starting loop..."
 while true; do
-  traffic_stats_count=$(grep -Po "Traffic stats" $LOG_FILE | wc -l)
+  isVPNActive || reconnectVPN
 
-  if [ $traffic_stats_count -gt $TRAFFIC_STATS_COUNT ]; then
-    TRAFFIC_STATS_COUNT=$traffic_stats_count
-    TOTAL=$(grep -Po "Total\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\s*\|\s*\d+\.\d+" "./$LOG_FILE" | grep -Po "\d+\.\d+" | tail -n1)
-
-    TRAFFIC=$(echo "$TOTAL - $PREVIOUS_TOTAL" | bc)
-    SUMMARY_GENERATED=$(echo "$TRAFFIC + $SUMMARY_GENERATED" | bc)
-    PREVIOUS_TOTAL=$TOTAL
-
-    sed -i "1s/.*/$(date): Generated: \
-        $(echo ${SUMMARY_GENERATED} | grep -Po "^\d+" | awk '{print $1"Mi"}' | numfmt --from=iec-i \
-         | numfmt --to=iec-i --suffix=B)/" $SUMMARY_LOG_FILE
-    if (($(echo "$TRAFFIC < $MIN_TRAFFIC" | bc -l))) && [ "$(expr $(date +%s) - $PROCESS_STARTUP_TIME)" -gt $TIME_OUT_SEC ]; then
-      killPreviousAttacker
-      startAttacker
-    fi
-  fi
-
-  if [ "$(expr $(date +%s) - $LAST_RELEASE_CHECK_TIME)" -gt $CHECK_FOR_NEW_RELEASE_INTERVAL ]; then
+  if [ "$(expr $(date +%s) - $LAST_RELEASE_CHECK_TIME)" -gt $RELEASE_CHECK_INTERVAL ]; then
     LAST_RELEASE_CHECK_TIME=$(date +%s)
+
+    reconnectVPN
 
     if isNewerAttackerAvailable; then
       killPreviousAttacker
