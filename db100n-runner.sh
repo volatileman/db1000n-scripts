@@ -102,7 +102,5 @@ while true; do
     fi
   fi
 
-  isVPNActive || reconnectVPN
-
-  sleep 5
+  sleep 60
 done
