@@ -91,7 +91,7 @@ CONNECTION_NAME=$1
 echo "Connection to use: ${CONNECTION_NAME:-"---"}"
 echo "Starting loop..."
 
-/bin/bash ./connect-vpn.sh
+sudo ./connect-vpn.sh
 
 while true; do
 
