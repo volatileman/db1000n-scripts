@@ -31,10 +31,10 @@ killPreviousAttacker() {
 }
 
 isNewerAttackerAvailable() {
-  LATEST_TAG=$(curl -s https://api.github.com/repos/Arriven/db1000n/releases | jq -r '.[0].tag_name')
+  LATEST_TAG=$(curl --max-time 10 -s https://api.github.com/repos/Arriven/db1000n/releases | jq -r '.[0].tag_name')
   LATEST_RELEASE_VERSION=$(echo $LATEST_TAG | grep -Po "\d*" | tr -d '\n')
 
-  if [ $LATEST_RELEASE_VERSION -ne $LOCAL_VERSION ]; then
+  if [ "${LATEST_RELEASE_VERSION:-$LOCAL_VERSION}" -ne "$LOCAL_VERSION" ]; then
       echo $(date): Local attacker version: $LOCAL_VERSION
       echo $(date): Found latest release version: $LATEST_RELEASE_VERSION
       return 0
