@@ -91,8 +91,6 @@ CONNECTION_NAME=$1
 echo "Connection to use: ${CONNECTION_NAME:-"---"}"
 echo "Starting loop..."
 
-sudo ./connect-vpn.sh
-
 while true; do
 
   if [ "$(expr $(date +%s) - $LAST_RELEASE_CHECK_TIME)" -gt $RELEASE_CHECK_INTERVAL ]; then
